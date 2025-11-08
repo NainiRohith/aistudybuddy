@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import api from '../services/api'
 import '../App.css'
+import './AIChat.css'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -77,8 +80,18 @@ export default function AIChat() {
                     ? '0 4px 15px rgba(102, 126, 234, 0.4)' 
                     : '0 2px 8px rgba(0, 0, 0, 0.2)'
                 }}
+                className="message-content"
               >
-                {message.content}
+                {message.role === 'assistant' ? (
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    className="ai-response"
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+                ) : (
+                  message.content
+                )}
               </div>
             </div>
           ))}

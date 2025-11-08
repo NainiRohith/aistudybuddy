@@ -19,7 +19,7 @@ export default function Navbar() {
     <nav className="navbar">
       <div className="navbar-container">
         <Link to="/dashboard" className="navbar-brand">
-          📚 Study Planner
+          🤖 AI Study Buddy
         </Link>
         <div className="navbar-links">
           <Link to="/dashboard">Dashboard</Link>

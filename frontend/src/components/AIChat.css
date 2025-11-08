@@ -1,0 +1,267 @@
+/* AI Chat Message Styling */
+.message-content {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.ai-response {
+  line-height: 1.6;
+}
+
+.ai-response p {
+  margin: 0.75rem 0;
+}
+
+.ai-response p:first-child {
+  margin-top: 0;
+}
+
+.ai-response p:last-child {
+  margin-bottom: 0;
+}
+
+/* Headings */
+.ai-response h1,
+.ai-response h2,
+.ai-response h3,
+.ai-response h4 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.ai-response h1 {
+  font-size: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 0.5rem;
+}
+
+.ai-response h2 {
+  font-size: 1.25rem;
+}
+
+.ai-response h3 {
+  font-size: 1.1rem;
+}
+
+/* Lists */
+.ai-response ul,
+.ai-response ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+
+.ai-response li {
+  margin: 0.5rem 0;
+  line-height: 1.5;
+}
+
+.ai-response ul {
+  list-style-type: disc;
+}
+
+.ai-response ol {
+  list-style-type: decimal;
+}
+
+/* Code blocks */
+.ai-response code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.ai-response pre {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ai-response pre code {
+  background: none;
+  padding: 0;
+  border: none;
+  color: #e0e0e0;
+  font-size: 0.85em;
+  display: block;
+}
+
+/* Blockquotes */
+.ai-response blockquote {
+  border-left: 3px solid rgba(102, 126, 234, 0.5);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-style: italic;
+  background: rgba(102, 126, 234, 0.1);
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+}
+
+/* Links */
+.ai-response a {
+  color: #a78bfa;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.ai-response a:hover {
+  color: #c4b5fd;
+}
+
+/* Tables */
+.ai-response table {
+  border-collapse: collapse;
+  margin: 1rem 0;
+  width: 100%;
+  font-size: 0.9em;
+}
+
+.ai-response th,
+.ai-response td {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.ai-response th {
+  background: rgba(102, 126, 234, 0.2);
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.ai-response tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Horizontal rules */
+.ai-response hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  margin: 1.5rem 0;
+}
+
+/* Strong and emphasis */
+.ai-response strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.ai-response em {
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Task lists */
+.ai-response input[type="checkbox"] {
+  margin-right: 0.5rem;
+  accent-color: #667eea;
+}
+
+/* Inline code in paragraphs */
+.ai-response p code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+/* Summary content styling (reuse AI response styles) */
+.summary-content {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.summary-content p {
+  margin: 0.75rem 0;
+}
+
+.summary-content p:first-child {
+  margin-top: 0;
+}
+
+.summary-content p:last-child {
+  margin-bottom: 0;
+}
+
+.summary-content h1,
+.summary-content h2,
+.summary-content h3,
+.summary-content h4 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.summary-content h1 {
+  font-size: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 0.5rem;
+}
+
+.summary-content h2 {
+  font-size: 1.25rem;
+}
+
+.summary-content h3 {
+  font-size: 1.1rem;
+}
+
+.summary-content ul,
+.summary-content ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+
+.summary-content li {
+  margin: 0.5rem 0;
+  line-height: 1.5;
+}
+
+.summary-content code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.summary-content pre {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 1rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.summary-content pre code {
+  background: none;
+  padding: 0;
+  border: none;
+  color: #e0e0e0;
+  font-size: 0.85em;
+  display: block;
+}
+
+.summary-content strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.summary-content em {
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.9);
+}
+

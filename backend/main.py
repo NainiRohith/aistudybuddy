@@ -18,15 +18,19 @@ from schemas import (
     WeaknessResponse, SyllabusImportRequest, GeneratePlanRequest,
     UpdateSessionRequest, ChatRequest
 )
-from auth import get_current_user, create_access_token, verify_password, get_password_hash
+from auth import get_current_user, create_access_token, verify_password, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 from syllabus_parser import parse_syllabus, extract_text_from_pdf, extract_text_from_ppt
 from ai_assistant import get_ai_response
+from quiz_generator import generate_quiz_questions_from_topics
+from summarizer import summarize_syllabus
+from plan_explainer import explain_study_plan
+from topic_explainer import explain_topic
 
 load_dotenv()
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Study Planner API", version="1.0.0")
+app = FastAPI(title="AI Study Buddy API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,12 +77,65 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token = create_access_token(data={"sub": user.email})
+    
+    # Update login streak
+    now = datetime.utcnow()
+    today = now.date()
+    
+    if user.last_login_date:
+        last_login = user.last_login_date.date()
+        days_diff = (today - last_login).days
+        
+        if days_diff == 0:
+            # Already logged in today, don't update streak
+            pass
+        elif days_diff == 1:
+            # Consecutive day - increment streak
+            user.login_streak = (user.login_streak or 0) + 1
+            if user.login_streak > (user.longest_streak or 0):
+                user.longest_streak = user.login_streak
+        else:
+            # Streak broken - reset to 1
+            user.login_streak = 1
+    else:
+        # First login - start streak
+        user.login_streak = 1
+    
+    user.last_login_date = now
+    db.commit()
+    
+    # Use longer expiration time (30 minutes)
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(data={"sub": user.email}, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.get("/users/me", response_model=UserResponse)
 def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@app.get("/users/me/streak")
+def get_user_streak(current_user: User = Depends(get_current_user)):
+    """Get user's login streak information"""
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == current_user.id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Calculate days since last login
+        days_since_login = None
+        if user.last_login_date:
+            days_since_login = (datetime.utcnow().date() - user.last_login_date.date()).days
+        
+        return {
+            "login_streak": user.login_streak or 0,
+            "longest_streak": user.longest_streak or 0,
+            "last_login_date": user.last_login_date.isoformat() if user.last_login_date else None,
+            "days_since_login": days_since_login,
+            "is_streak_active": days_since_login == 0 if days_since_login is not None else False
+        }
+    finally:
+        db.close()
 
 # Course endpoints
 @app.post("/courses", response_model=CourseResponse)
@@ -97,7 +154,7 @@ def get_courses(db: Session = Depends(get_db), current_user: User = Depends(get_
 @app.post("/courses/{course_id}/import-syllabus")
 async def import_syllabus(
     course_id: int, 
-    file: Optional[UploadFile] = File(None),
+    files: List[UploadFile] = File(default=[]),
     syllabus_text: Optional[str] = Form(None),
     db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
@@ -107,28 +164,61 @@ async def import_syllabus(
         raise HTTPException(status_code=404, detail="Course not found")
     
     text_content = ""
+    all_text_parts = []
+    processed_files = []
     
-    # Handle file upload
-    if file:
-        file_extension = file.filename.split('.')[-1].lower() if file.filename else ""
+    # Handle multiple file uploads
+    if files and len(files) > 0:
+        for file in files:
+            if not file.filename:
+                continue
+                
+            file_extension = file.filename.split('.')[-1].lower()
+            
+            try:
+                if file_extension == "pdf":
+                    content = await file.read()
+                    extracted_text = extract_text_from_pdf(content)
+                    if extracted_text and extracted_text.strip():
+                        all_text_parts.append(f"\n\n--- Content from {file.filename} ---\n\n{extracted_text}")
+                        processed_files.append(file.filename)
+                elif file_extension in ["ppt", "pptx"]:
+                    content = await file.read()
+                    extracted_text = extract_text_from_ppt(content)
+                    if extracted_text and extracted_text.strip():
+                        all_text_parts.append(f"\n\n--- Content from {file.filename} ---\n\n{extracted_text}")
+                        processed_files.append(file.filename)
+                else:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Unsupported file format for {file.filename}. Please upload PDF or PPT/PPTX files."
+                    )
+            except HTTPException:
+                # Re-raise HTTP exceptions
+                raise
+            except Exception as e:
+                # Log error but continue with other files
+                print(f"Error processing file {file.filename}: {str(e)}")
+                # Don't fail completely, just skip this file
+                continue
         
-        if file_extension == "pdf":
-            content = await file.read()
-            text_content = extract_text_from_pdf(content)
-        elif file_extension in ["ppt", "pptx"]:
-            content = await file.read()
-            text_content = extract_text_from_ppt(content)
+        # Combine all text from multiple files
+        if all_text_parts:
+            text_content = "\n".join(all_text_parts)
         else:
-            raise HTTPException(status_code=400, detail=f"Unsupported file format. Please upload PDF or PPT/PPTX files.")
+            raise HTTPException(
+                status_code=400, 
+                detail="No content extracted from any of the uploaded files. Please check that the files are valid PDF or PPT/PPTX files."
+            )
     
     # Handle text input
     elif syllabus_text:
         text_content = syllabus_text
     else:
-        raise HTTPException(status_code=400, detail="Either file or syllabus_text must be provided")
+        raise HTTPException(status_code=400, detail="Either files or syllabus_text must be provided")
     
-    if not text_content:
-        raise HTTPException(status_code=400, detail="No content extracted from the file")
+    if not text_content or not text_content.strip():
+        raise HTTPException(status_code=400, detail="No content extracted from the files")
     
     # Parse syllabus to extract dates and topics
     parsed_data = parse_syllabus(text_content)
@@ -139,8 +229,22 @@ async def import_syllabus(
     if parsed_data.get("deadlines"):
         course.deadlines = parsed_data["deadlines"]
     
+    # Store the full syllabus content for summarization
+    course.syllabus_content = text_content
+    
     db.commit()
-    return {"message": "Syllabus imported successfully", "data": parsed_data}
+    
+    file_count = len(processed_files) if processed_files else (len(files) if files else 0)
+    has_topics = parsed_data.get("topics") and len(parsed_data["topics"]) > 0
+    
+    return {
+        "message": "Syllabus imported successfully", 
+        "data": parsed_data,
+        "has_topics": has_topics,
+        "topics_count": len(parsed_data.get("topics", [])) if has_topics else 0,
+        "files_processed": file_count,
+        "processed_file_names": processed_files if processed_files else []
+    }
 
 # Study Plan endpoints
 @app.post("/study-plans", response_model=StudyPlanResponse)
@@ -163,28 +267,102 @@ def generate_study_plan(request: GeneratePlanRequest, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="Course not found")
     
     # Generate weekly plan based on course deadlines and topics
-    start = datetime.fromisoformat(request.start_date)
+    # Handle date format - support both 'yyyy-MM-dd' and ISO format
+    try:
+        if len(request.start_date) == 10:  # Format: 'yyyy-MM-dd'
+            start = datetime.strptime(request.start_date, '%Y-%m-%d')
+        else:
+            start = datetime.fromisoformat(request.start_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {request.start_date}. Please use YYYY-MM-DD format.")
+    
+    # Parse end_date if provided, otherwise calculate it
+    if request.end_date:
+        try:
+            if len(request.end_date) == 10:  # Format: 'yyyy-MM-dd'
+                end_date = datetime.strptime(request.end_date, '%Y-%m-%d')
+            else:
+                end_date = datetime.fromisoformat(request.end_date)
+            
+            # Validate that end_date is after start_date
+            if end_date <= start:
+                raise HTTPException(status_code=400, detail="End date must be after start date.")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid end date format: {request.end_date}. Please use YYYY-MM-DD format.")
+    else:
+        # Calculate end date based on number of topics (allow 2-3 days per topic)
+        # Or use 8 weeks minimum, whichever is longer
+        days_needed = max(len(course.topics or []) * 2, 56)  # At least 8 weeks (56 days)
+        end_date = start + timedelta(days=days_needed)
+    
     sessions = []
     
-    # Simple algorithm: distribute topics across weeks
+    # Get topics from course - ensure they're in list format
     topics = course.topics or []
+    if isinstance(topics, str):
+        # If topics is stored as a string, try to parse it
+        try:
+            import json
+            topics = json.loads(topics)
+        except:
+            topics = [topics] if topics else []
+    
+    # Ensure topics is a list
+    if not isinstance(topics, list):
+        topics = []
+    
     deadlines = course.deadlines or []
     
+    if not topics:
+        raise HTTPException(
+            status_code=400, 
+            detail="No topics found for this course. Please import a syllabus first to extract topics."
+        )
+    
+    # Distribute topics evenly across the study period
+    total_days = (end_date - start).days
+    if len(topics) > 0:
+        days_per_topic = max(1, total_days // len(topics))
+    else:
+        days_per_topic = 2
+    
+    # Create a study session for each topic
     for i, topic in enumerate(topics):
-        session_date = start + timedelta(days=i * 2)  # Every 2 days
+        # Skip empty or invalid topics
+        if not topic or not isinstance(topic, str) or len(topic.strip()) == 0:
+            continue
+        
+        # Calculate session date - distribute evenly
+        session_date = start + timedelta(days=i * days_per_topic)
+        
+        # Ensure session date doesn't exceed end date
+        if session_date > end_date:
+            session_date = end_date - timedelta(days=1)
+        
         session = StudySession(
-            topic=topic,
+            topic=topic.strip(),
             scheduled_date=session_date,
             duration_minutes=60,
             status="planned"
         )
         sessions.append(session)
     
+    if not sessions:
+        raise HTTPException(
+            status_code=400,
+            detail="No valid topics found to create study sessions. Please check your syllabus import."
+        )
+    
+    # Update end date to match the last session (only if end_date was auto-calculated)
+    if not request.end_date and sessions:
+        last_session_date = max(session.scheduled_date for session in sessions)
+        end_date = last_session_date + timedelta(days=1)
+    
     plan = StudyPlan(
         course_id=request.course_id,
         user_id=current_user.id,
         start_date=start,
-        end_date=start + timedelta(weeks=8),
+        end_date=end_date,
         sessions=sessions
     )
     
@@ -192,6 +370,92 @@ def generate_study_plan(request: GeneratePlanRequest, db: Session = Depends(get_
     db.commit()
     db.refresh(plan)
     return plan
+
+@app.get("/courses/{course_id}/summarize")
+def summarize_course_syllabus(course_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    course = db.query(Course).filter(Course.id == course_id, Course.user_id == current_user.id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    if not course.syllabus_content:
+        raise HTTPException(
+            status_code=400, 
+            detail="No syllabus content found. Please import a syllabus first (PDF/PPT or text)."
+        )
+    
+    try:
+        summary = summarize_syllabus(course.syllabus_content, course.name)
+        return {"summary": summary}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
+
+@app.get("/study-plans/{plan_id}/explain")
+def explain_plan(plan_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    plan = db.query(StudyPlan).filter(StudyPlan.id == plan_id, StudyPlan.user_id == current_user.id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Study plan not found")
+    
+    course = db.query(Course).filter(Course.id == plan.course_id).first()
+    course_name = course.name if course else "Unknown Course"
+    
+    # Convert sessions to dict format for the explainer
+    sessions_data = []
+    for session in plan.sessions:
+        sessions_data.append({
+            "topic": session.topic,
+            "scheduled_date": session.scheduled_date.strftime('%B %d, %Y'),
+            "duration_minutes": session.duration_minutes,
+            "status": session.status
+        })
+    
+    try:
+        explanation = explain_study_plan(
+            course_name=course_name,
+            sessions=sessions_data,
+            start_date=plan.start_date,
+            end_date=plan.end_date
+        )
+        return {"explanation": explanation}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate explanation: {str(e)}")
+
+@app.get("/study-sessions/{session_id}/explain")
+def explain_session_topic(session_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Explain a specific study session topic with examples using AI."""
+    session = db.query(StudySession).filter(StudySession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Study session not found")
+    
+    # Verify the session belongs to the user's study plan
+    plan = db.query(StudyPlan).filter(StudyPlan.id == session.plan_id, StudyPlan.user_id == current_user.id).first()
+    if not plan:
+        raise HTTPException(status_code=403, detail="You don't have access to this session")
+    
+    # Get course information for context
+    course = db.query(Course).filter(Course.id == plan.course_id).first()
+    course_name = course.name if course else None
+    syllabus_context = course.syllabus_content if course else None
+    
+    try:
+        explanation = explain_topic(
+            topic=session.topic,
+            course_name=course_name,
+            syllabus_context=syllabus_context
+        )
+        return {"explanation": explanation, "topic": session.topic}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate explanation: {str(e)}")
+
+@app.delete("/study-plans/{plan_id}")
+def delete_study_plan(plan_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    plan = db.query(StudyPlan).filter(StudyPlan.id == plan_id, StudyPlan.user_id == current_user.id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Study plan not found")
+    
+    # Sessions will be deleted automatically due to cascade relationship
+    db.delete(plan)
+    db.commit()
+    return {"message": "Study plan deleted successfully"}
 
 @app.put("/study-plans/{plan_id}/sessions/{session_id}")
 def update_session(plan_id: int, session_id: int, request: UpdateSessionRequest,
@@ -240,9 +504,18 @@ def search_resources(query: Optional[str] = None, topic: Optional[str] = None,
 
 # Quiz endpoints
 @app.get("/quizzes", response_model=List[QuizResponse])
-def get_quizzes(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    quizzes = db.query(Quiz).filter(Quiz.user_id == current_user.id).all()
-    return quizzes
+def get_quizzes(
+    course_id: Optional[int] = None,
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    quizzes = db.query(Quiz).filter(Quiz.user_id == current_user.id)
+    
+    # Filter by course if provided
+    if course_id:
+        quizzes = quizzes.filter(Quiz.course_id == course_id)
+    
+    return quizzes.all()
 
 @app.post("/quizzes", response_model=QuizResponse)
 def create_quiz(quiz: QuizCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -251,6 +524,53 @@ def create_quiz(quiz: QuizCreate, db: Session = Depends(get_db), current_user: U
     db.commit()
     db.refresh(db_quiz)
     return db_quiz
+
+@app.post("/courses/{course_id}/generate-quiz")
+def generate_quiz_from_course(course_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Generate a quiz from course topics"""
+    course = db.query(Course).filter(Course.id == course_id, Course.user_id == current_user.id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    topics = course.topics or []
+    if isinstance(topics, str):
+        try:
+            import json
+            topics = json.loads(topics)
+        except:
+            topics = [topics] if topics else []
+    
+    if not isinstance(topics, list):
+        topics = []
+    
+    if not topics or len(topics) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No topics found for this course. Please import a syllabus first to extract topics."
+        )
+    
+    try:
+        # Generate questions from topics
+        questions = generate_quiz_questions_from_topics(
+            topics,
+            course.name,
+            num_questions=10
+        )
+        
+        # Create quiz for this course
+        quiz_title = f"{course.name} - Syllabus Quiz"
+        db_quiz = Quiz(
+            title=quiz_title,
+            course_id=course.id,
+            user_id=current_user.id,
+            questions=questions
+        )
+        db.add(db_quiz)
+        db.commit()
+        db.refresh(db_quiz)
+        return db_quiz
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate quiz: {str(e)}")
 
 @app.get("/quizzes/{quiz_id}", response_model=QuizResponse)
 def get_quiz(quiz_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -322,6 +642,42 @@ def get_weaknesses(db: Session = Depends(get_db), current_user: User = Depends(g
     weaknesses = db.query(Weakness).filter(Weakness.user_id == current_user.id).order_by(Weakness.count.desc()).all()
     return weaknesses
 
+@app.delete("/weaknesses/{weakness_id}")
+def delete_weakness(weakness_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Delete a weakness when user has improved"""
+    weakness = db.query(Weakness).filter(Weakness.id == weakness_id, Weakness.user_id == current_user.id).first()
+    if not weakness:
+        raise HTTPException(status_code=404, detail="Weakness not found")
+    
+    db.delete(weakness)
+    db.commit()
+    return {"message": "Weakness removed successfully"}
+
+@app.get("/weaknesses/{weakness_id}/recommendations")
+def get_weakness_recommendations(weakness_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get AI-powered study recommendations for a specific weakness"""
+    weakness = db.query(Weakness).filter(Weakness.id == weakness_id, Weakness.user_id == current_user.id).first()
+    if not weakness:
+        raise HTTPException(status_code=404, detail="Weakness not found")
+    
+    try:
+        from ai_assistant import get_ai_response
+        
+        prompt = f"""I'm struggling with the topic "{weakness.topic}" and have gotten {weakness.count} questions wrong about it. 
+        Please provide:
+        1. A brief explanation of why this topic might be challenging
+        2. Specific study strategies to improve
+        3. Recommended practice activities
+        4. Key concepts to focus on
+        5. Resources or approaches that would help
+        
+        Format your response in clear sections with bullet points."""
+        
+        recommendations = get_ai_response(prompt)
+        return {"recommendations": recommendations, "topic": weakness.topic}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate recommendations: {str(e)}")
+
 # AI Assistant endpoint
 @app.post("/ai/chat")
 def chat_with_ai(request: ChatRequest,
@@ -337,5 +693,5 @@ def chat_with_ai(request: ChatRequest,
 
 @app.get("/")
 def root():
-    return {"message": "Study Planner API", "version": "1.0.0"}
+    return {"message": "AI Study Buddy API", "version": "1.0.0"}
 

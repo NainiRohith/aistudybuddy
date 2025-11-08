@@ -1,0 +1,33 @@
+🚀 Starting Study Planner Application...
+📦 Starting backend server...
+WARNING: The candidate selected for download or install is a yanked version: 'email-validator' candidate (version 2.1.0 at https://files.pythonhosted.org/packages/90/41/4767ff64e422734487a06384a66e62615b1f5cf9cf3b23295e22d3ecf711/email_validator-2.1.0-py3-none-any.whl (from https://pypi.org/simple/email-validator/) (requires-python:>=3.7))
+Reason for being yanked: Forgot to drop Python 3.7 from python_requires, see https://github.com/JoshData/python-email-validator/pull/118
+
+[notice] A new release of pip is available: 24.0 -> 25.3
+[notice] To update, run: pip install --upgrade pip
+✅ Backend dependencies installed
+🌐 Starting backend server on http://localhost:8000
+📦 Starting frontend server...
+✅ Frontend dependencies installed
+🌐 Starting frontend server on http://localhost:3000
+
+✅ Application started!
+📚 Backend API: http://localhost:8000
+📚 API Docs: http://localhost:8000/docs
+🎨 Frontend: http://localhost:3000
+
+Press Ctrl+C to stop both servers
+INFO:     Will watch for changes in these directories: ['/Users/rohithnaini/Desktop/Fall2025/ux_with_ai/app2/backend']
+ERROR:    [Errno 48] Address already in use
+
+> study-planner-frontend@1.0.0 dev
+> vite
+
+Port 3000 is in use, trying another one...
+
+  VITE v5.4.21  ready in 228 ms
+
+  ➜  Local:   http://localhost:3001/
+  ➜  Network: http://192.168.1.8:3001/
+11:20:04 PM [vite] page reload index.html
+11:20:31 PM [vite] page reload index.html

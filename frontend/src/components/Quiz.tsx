@@ -5,6 +5,7 @@ import '../App.css'
 interface Quiz {
   id: number
   title: string
+  course_id?: number
   questions: Array<{
     question: string
     options: string[]
@@ -13,8 +14,15 @@ interface Quiz {
   }>
 }
 
+interface Course {
+  id: number
+  name: string
+}
+
 export default function Quiz() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
+  const [courses, setCourses] = useState<Course[]>([])
+  const [selectedCourse, setSelectedCourse] = useState<number | null>(null)
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null)
   const [answers, setAnswers] = useState<string[]>([])
   const [submitted, setSubmitted] = useState(false)
@@ -26,13 +34,30 @@ export default function Quiz() {
   const [showCreateForm, setShowCreateForm] = useState(false)
 
   useEffect(() => {
+    fetchCourses()
     fetchQuizzes()
   }, [])
 
+  useEffect(() => {
+    fetchQuizzes()
+  }, [selectedCourse])
+
+  const fetchCourses = async () => {
+    try {
+      const response = await api.get('/courses')
+      setCourses(response.data)
+    } catch (error) {
+      console.error('Failed to fetch courses:', error)
+    }
+  }
+
   const fetchQuizzes = async () => {
     try {
-      // Try to fetch quizzes from the API
-      const response = await api.get('/quizzes')
+      // Fetch quizzes, optionally filtered by course
+      const url = selectedCourse 
+        ? `/quizzes?course_id=${selectedCourse}`
+        : '/quizzes'
+      const response = await api.get(url)
       if (response.data && response.data.length > 0) {
         // Check if we have a quiz with 10 questions
         const quizzes = response.data
@@ -399,6 +424,10 @@ export default function Quiz() {
       setSubmitted(true)
     } catch (error: any) {
       console.error('Failed to submit quiz:', error)
+      if (error.response?.status === 401) {
+        // Token expired - will be handled by interceptor
+        return
+      }
       const errorMessage = error.response?.data?.detail || 'Failed to submit quiz. Please try again.'
       alert(errorMessage)
     }
@@ -432,6 +461,23 @@ export default function Quiz() {
               <button className="btn btn-primary" onClick={() => setShowCreateForm(!showCreateForm)}>
                 {showCreateForm ? 'Cancel' : 'Create Quiz'}
               </button>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label className="label">Filter by Course (Optional)</label>
+              <select
+                className="input"
+                value={selectedCourse || ''}
+                onChange={(e) => setSelectedCourse(e.target.value ? parseInt(e.target.value) : null)}
+                style={{ marginTop: '0.5rem' }}
+              >
+                <option value="">All Courses</option>
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {showCreateForm && (
@@ -527,9 +573,37 @@ export default function Quiz() {
                       <h3 style={{ marginBottom: '0.5rem' }}>{quiz.title}</h3>
                       <p style={{ color: 'rgba(255, 255, 255, 0.6)' }}>{quiz.questions.length} questions</p>
                     </div>
-                    <button className="btn btn-primary" onClick={() => handleStartQuiz(quiz)}>
-                      Start Quiz
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                      <button className="btn btn-primary" onClick={() => handleStartQuiz(quiz)}>
+                        Start Quiz
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={async () => {
+                          if (window.confirm(`Are you sure you want to delete "${quiz.title}"? This action cannot be undone.`)) {
+                            try {
+                              await api.delete(`/quizzes/${quiz.id}`)
+                              await fetchQuizzes()
+                              if (selectedQuiz?.id === quiz.id) {
+                                setSelectedQuiz(null)
+                                setSubmitted(false)
+                                setScore(null)
+                              }
+                            } catch (error: any) {
+                              console.error('Failed to delete quiz:', error)
+                              alert(error.response?.data?.detail || 'Failed to delete quiz. Please try again.')
+                            }
+                          }
+                        }}
+                        style={{
+                          background: 'rgba(255, 107, 107, 0.2)',
+                          border: '1px solid rgba(255, 107, 107, 0.5)',
+                          color: '#ff6b6b'
+                        }}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

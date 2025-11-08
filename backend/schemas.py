@@ -12,6 +12,9 @@ class UserResponse(BaseModel):
     id: int
     email: str
     full_name: Optional[str]
+    login_streak: Optional[int] = 0
+    last_login_date: Optional[datetime] = None
+    longest_streak: Optional[int] = 0
     created_at: datetime
     
     class Config:
@@ -34,6 +37,7 @@ class CourseResponse(BaseModel):
     code: Optional[str]
     topics: Optional[List[str]]
     deadlines: Optional[List[Dict[str, Any]]]
+    syllabus_content: Optional[str] = None  # Not exposed in response by default
     created_at: datetime
     
     class Config:
@@ -132,6 +136,7 @@ class SyllabusImportRequest(BaseModel):
 class GeneratePlanRequest(BaseModel):
     course_id: int
     start_date: str
+    end_date: Optional[str] = None
 
 class UpdateSessionRequest(BaseModel):
     new_date: Optional[str] = None

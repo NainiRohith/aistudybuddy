@@ -10,6 +10,9 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     full_name = Column(String)
+    login_streak = Column(Integer, default=0)
+    last_login_date = Column(DateTime(timezone=True), nullable=True)
+    longest_streak = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     courses = relationship("Course", back_populates="user")
@@ -28,6 +31,7 @@ class Course(Base):
     code = Column(String)
     topics = Column(JSON)  # List of topics
     deadlines = Column(JSON)  # List of deadlines with dates
+    syllabus_content = Column(Text)  # Full syllabus text content
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     user = relationship("User", back_populates="courses")
