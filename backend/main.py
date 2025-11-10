@@ -8,7 +8,7 @@ import os
 from dotenv import load_dotenv
 
 from database import SessionLocal, engine, Base
-from models import User, Course, StudyPlan, StudySession, Resource, Quiz, QuizAttempt, Weakness
+from models import User, Course, StudyPlan, StudySession, Resource, Quiz, QuizAttempt, Weakness, Test
 from schemas import (
     UserCreate, UserResponse, Token,
     CourseCreate, CourseResponse,
@@ -16,7 +16,8 @@ from schemas import (
     ResourceCreate, ResourceResponse,
     QuizCreate, QuizResponse, QuizAttemptCreate, QuizAttemptResponse,
     WeaknessResponse, SyllabusImportRequest, GeneratePlanRequest,
-    UpdateSessionRequest, ChatRequest
+    UpdateSessionRequest, ChatRequest,
+    TestCreate, TestUpdate, TestResponse
 )
 from auth import get_current_user, create_access_token, verify_password, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 from syllabus_parser import parse_syllabus, extract_text_from_pdf, extract_text_from_ppt
@@ -25,6 +26,7 @@ from quiz_generator import generate_quiz_questions_from_topics
 from summarizer import summarize_syllabus
 from plan_explainer import explain_study_plan
 from topic_explainer import explain_topic
+from test_recommender import generate_test_study_plan
 
 load_dotenv()
 
@@ -493,14 +495,43 @@ def search_resources(query: Optional[str] = None, topic: Optional[str] = None,
                     db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     resources = db.query(Resource).filter(Resource.user_id == current_user.id)
     
+    # Apply query filter (title/description search)
     if query:
-        resources = resources.filter(Resource.title.contains(query) | Resource.description.contains(query))
-    if topic:
-        resources = resources.filter(Resource.topics.contains(topic))
+        resources = resources.filter(
+            Resource.title.contains(query) | 
+            (Resource.description.isnot(None) & Resource.description.contains(query))
+        )
+    
+    # Apply resource_type filter
     if resource_type:
         resources = resources.filter(Resource.resource_type == resource_type)
     
-    return resources.all()
+    # Get all resources that match query and resource_type filters
+    all_resources = resources.all()
+    
+    # Apply topic filter in Python (since topics is JSON field)
+    if topic:
+        import json
+        filtered_resources = []
+        for resource in all_resources:
+            if resource.topics:
+                # Handle different formats: list, JSON string, or None
+                if isinstance(resource.topics, list):
+                    topics_list = resource.topics
+                elif isinstance(resource.topics, str):
+                    try:
+                        topics_list = json.loads(resource.topics)
+                    except:
+                        topics_list = [resource.topics]
+                else:
+                    topics_list = []
+                
+                # Check if topic matches any in the list (case-insensitive)
+                if any(topic.lower() in str(t).lower() for t in topics_list):
+                    filtered_resources.append(resource)
+        return filtered_resources
+    
+    return all_resources
 
 # Quiz endpoints
 @app.get("/quizzes", response_model=List[QuizResponse])
@@ -525,7 +556,7 @@ def create_quiz(quiz: QuizCreate, db: Session = Depends(get_db), current_user: U
     db.refresh(db_quiz)
     return db_quiz
 
-@app.post("/courses/{course_id}/generate-quiz")
+@app.post("/courses/{course_id}/generate-quiz", response_model=QuizResponse)
 def generate_quiz_from_course(course_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Generate a quiz from course topics"""
     course = db.query(Course).filter(Course.id == course_id, Course.user_id == current_user.id).first()
@@ -690,6 +721,165 @@ def chat_with_ai(request: ChatRequest,
     
     response = get_ai_response(request.message, context)
     return {"response": response}
+
+# Test endpoints
+@app.post("/tests", response_model=TestResponse)
+def create_test(test: TestCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Create a new test/exam entry"""
+    course = db.query(Course).filter(Course.id == test.course_id, Course.user_id == current_user.id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    # Parse test_date string
+    try:
+        if 'T' in test.test_date:
+            test_date = datetime.fromisoformat(test.test_date.replace('Z', '+00:00'))
+        else:
+            test_date = datetime.strptime(test.test_date, '%Y-%m-%d')
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {str(e)}")
+    
+    db_test = Test(
+        user_id=current_user.id,
+        course_id=test.course_id,
+        name=test.name,
+        test_date=test_date,
+        test_type=test.test_type,
+        score=test.score,
+        max_score=test.max_score or 100,
+        weight=test.weight or 0.0,
+        topics=test.topics,
+        notes=test.notes
+    )
+    db.add(db_test)
+    db.commit()
+    db.refresh(db_test)
+    return db_test
+
+@app.get("/tests", response_model=List[TestResponse])
+def get_tests(
+    course_id: Optional[int] = None,
+    upcoming_only: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all tests, optionally filtered by course or upcoming only"""
+    tests = db.query(Test).filter(Test.user_id == current_user.id)
+    
+    if course_id:
+        tests = tests.filter(Test.course_id == course_id)
+    
+    if upcoming_only:
+        tests = tests.filter(Test.test_date >= datetime.utcnow())
+    
+    return tests.order_by(Test.test_date.asc()).all()
+
+@app.get("/tests/{test_id}", response_model=TestResponse)
+def get_test(test_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get a specific test"""
+    test = db.query(Test).filter(Test.id == test_id, Test.user_id == current_user.id).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    return test
+
+@app.put("/tests/{test_id}", response_model=TestResponse)
+def update_test(test_id: int, test_update: TestUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Update a test"""
+    test = db.query(Test).filter(Test.id == test_id, Test.user_id == current_user.id).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    
+    if test_update.name is not None:
+        test.name = test_update.name
+    if test_update.test_date is not None:
+        try:
+            if 'T' in test_update.test_date:
+                test.test_date = datetime.fromisoformat(test_update.test_date.replace('Z', '+00:00'))
+            else:
+                test.test_date = datetime.strptime(test_update.test_date, '%Y-%m-%d')
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid date format: {str(e)}")
+    if test_update.test_type is not None:
+        test.test_type = test_update.test_type
+    if test_update.score is not None:
+        test.score = test_update.score
+    if test_update.max_score is not None:
+        test.max_score = test_update.max_score
+    if test_update.weight is not None:
+        test.weight = test_update.weight
+    if test_update.topics is not None:
+        test.topics = test_update.topics
+    if test_update.notes is not None:
+        test.notes = test_update.notes
+    
+    db.commit()
+    db.refresh(test)
+    return test
+
+@app.delete("/tests/{test_id}")
+def delete_test(test_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Delete a test"""
+    test = db.query(Test).filter(Test.id == test_id, Test.user_id == current_user.id).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    
+    db.delete(test)
+    db.commit()
+    return {"message": "Test deleted successfully"}
+
+@app.get("/tests/{test_id}/study-plan")
+def get_test_study_plan(test_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get AI-generated study plan recommendation for a test"""
+    test = db.query(Test).filter(Test.id == test_id, Test.user_id == current_user.id).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+    
+    course = db.query(Course).filter(Course.id == test.course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    # Calculate days until test
+    now = datetime.utcnow()
+    days_until = (test.test_date - now).days
+    
+    if days_until < 0:
+        raise HTTPException(status_code=400, detail="Test date has already passed")
+    
+    # Get user's weaknesses for this course
+    weaknesses = db.query(Weakness).filter(
+        Weakness.user_id == current_user.id
+    ).all()
+    weakness_topics = [w.topic for w in weaknesses]
+    
+    # Get topics for the test (use test topics if available, otherwise course topics)
+    topics = test.topics if test.topics else (course.topics if course.topics else [])
+    if isinstance(topics, str):
+        try:
+            import json
+            topics = json.loads(topics)
+        except:
+            topics = [topics] if topics else []
+    
+    if not isinstance(topics, list):
+        topics = []
+    
+    try:
+        study_plan = generate_test_study_plan(
+            course_name=course.name,
+            test_name=test.name,
+            test_date=test.test_date,
+            topics=topics,
+            days_until_test=days_until,
+            existing_weaknesses=weakness_topics
+        )
+        return {
+            "study_plan": study_plan,
+            "days_until_test": days_until,
+            "test_name": test.name,
+            "course_name": course.name
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate study plan: {str(e)}")
 
 @app.get("/")
 def root():

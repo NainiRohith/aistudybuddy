@@ -31,3 +31,6 @@ Port 3000 is in use, trying another one...
   ➜  Network: http://192.168.1.8:3001/
 11:20:04 PM [vite] page reload index.html
 11:20:31 PM [vite] page reload index.html
+5:36:31 AM [vite] ✨ new dependencies optimized: react-markdown, remark-gfm
+5:36:31 AM [vite] ✨ optimized dependencies changed. reloading
+./start.sh: line 62: 30343 Killed: 9               npm run dev  (wd: ~/Desktop/Fall2025/ux_with_ai/app2/frontend)

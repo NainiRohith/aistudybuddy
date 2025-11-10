@@ -26,6 +26,7 @@ export default function Navbar() {
           <Link to="/planner">Study Plan</Link>
           <Link to="/resources">Resources</Link>
           <Link to="/quiz">Quiz</Link>
+          <Link to="/tests">Tests</Link>
           <Link to="/weaknesses">Weaknesses</Link>
           <Link to="/ai-chat">AI Assistant</Link>
           <span className="navbar-user">{user.email}</span>
