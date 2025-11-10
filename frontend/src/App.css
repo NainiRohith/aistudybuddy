@@ -167,3 +167,35 @@ p {
   color: #d0d0d0;
 }
 
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.9;
+  }
+}
+
+.register-heading {
+  color: #ffffff !important;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3) !important;
+  -webkit-text-fill-color: #ffffff !important;
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+}
+
+/* Style links inside cards to be white */
+.card a {
+  color: #ffffff !important;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.card a:hover {
+  color: rgba(255, 255, 255, 0.8) !important;
+  text-decoration: underline;
+}
+

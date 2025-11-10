@@ -26,7 +26,7 @@ export default function Register() {
   return (
     <div className="container" style={{ maxWidth: '400px', marginTop: '5rem' }}>
       <div className="card">
-        <h1 style={{ marginBottom: '2rem', textAlign: 'center' }}>Register</h1>
+        <h1 className="register-heading" style={{ marginBottom: '2rem', textAlign: 'center', color: '#ffffff', WebkitTextFillColor: '#ffffff' }}>Register</h1>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="label">Full Name</label>

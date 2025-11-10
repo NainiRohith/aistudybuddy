@@ -7,6 +7,7 @@ import StudyPlanner from './components/StudyPlanner'
 import ResourceFinder from './components/ResourceFinder'
 import Quiz from './components/Quiz'
 import WeaknessTracker from './components/WeaknessTracker'
+import TestTracker from './components/TestTracker'
 import AIChat from './components/AIChat'
 import Navbar from './components/Navbar'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -68,6 +69,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <WeaknessTracker />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tests"
+        element={
+          <ProtectedRoute>
+            <TestTracker />
           </ProtectedRoute>
         }
       />

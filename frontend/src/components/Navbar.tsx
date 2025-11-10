@@ -19,13 +19,14 @@ export default function Navbar() {
     <nav className="navbar">
       <div className="navbar-container">
         <Link to="/dashboard" className="navbar-brand">
-          📚 Study Planner
+          🤖 AI Study Buddy
         </Link>
         <div className="navbar-links">
           <Link to="/dashboard">Dashboard</Link>
           <Link to="/planner">Study Plan</Link>
           <Link to="/resources">Resources</Link>
           <Link to="/quiz">Quiz</Link>
+          <Link to="/tests">Tests</Link>
           <Link to="/weaknesses">Weaknesses</Link>
           <Link to="/ai-chat">AI Assistant</Link>
           <span className="navbar-user">{user.email}</span>

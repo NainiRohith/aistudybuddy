@@ -1,6 +1,6 @@
-# Study Planner - Smart Learning Companion
+# AI Study Buddy - Your Smart Learning Companion
 
-A comprehensive study planning and learning management application that helps students manage multiple courses, find study materials, and get personalized feedback.
+A comprehensive study planning and learning management application that helps students manage multiple courses, find study materials, and get personalized feedback with AI-powered assistance.
 
 ## Features
 

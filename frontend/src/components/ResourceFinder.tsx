@@ -37,9 +37,16 @@ export default function ResourceFinder() {
       if (resourceType) params.resource_type = resourceType
       
       const response = await api.get('/resources', { params })
-      setResources(response.data)
-    } catch (error) {
+      setResources(response.data || [])
+    } catch (error: any) {
       console.error('Failed to fetch resources:', error)
+      // Show user-friendly error message
+      if (error.response?.status === 401) {
+        // Token expired - will be handled by interceptor
+        return
+      }
+      alert(error.response?.data?.detail || 'Failed to fetch resources. Please try again.')
+      setResources([])
     }
   }
 
@@ -48,13 +55,19 @@ export default function ResourceFinder() {
     try {
       await api.post('/resources', {
         ...newResource,
-        topics: newResource.topics ? newResource.topics.split(',').map(t => t.trim()) : []
+        topics: newResource.topics ? newResource.topics.split(',').map(t => t.trim()).filter(t => t) : []
       })
       setNewResource({ title: '', description: '', resource_type: '', url: '', topics: '' })
       setShowAddForm(false)
-      fetchResources()
-    } catch (error) {
+      await fetchResources()
+      alert('Resource added successfully!')
+    } catch (error: any) {
       console.error('Failed to add resource:', error)
+      if (error.response?.status === 401) {
+        // Token expired - will be handled by interceptor
+        return
+      }
+      alert(error.response?.data?.detail || 'Failed to add resource. Please try again.')
     }
   }
 

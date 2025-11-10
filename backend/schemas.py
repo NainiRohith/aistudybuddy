@@ -12,6 +12,9 @@ class UserResponse(BaseModel):
     id: int
     email: str
     full_name: Optional[str]
+    login_streak: Optional[int] = 0
+    last_login_date: Optional[datetime] = None
+    longest_streak: Optional[int] = 0
     created_at: datetime
     
     class Config:
@@ -34,6 +37,7 @@ class CourseResponse(BaseModel):
     code: Optional[str]
     topics: Optional[List[str]]
     deadlines: Optional[List[Dict[str, Any]]]
+    syllabus_content: Optional[str] = None  # Not exposed in response by default
     created_at: datetime
     
     class Config:
@@ -125,6 +129,44 @@ class WeaknessResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# Test schemas
+class TestCreate(BaseModel):
+    course_id: int
+    name: str
+    test_date: str  # ISO format string
+    test_type: Optional[str] = None
+    score: Optional[float] = None
+    max_score: Optional[float] = 100
+    weight: Optional[float] = 0.0
+    topics: Optional[List[str]] = None
+    notes: Optional[str] = None
+
+class TestUpdate(BaseModel):
+    name: Optional[str] = None
+    test_date: Optional[str] = None
+    test_type: Optional[str] = None
+    score: Optional[float] = None
+    max_score: Optional[float] = None
+    weight: Optional[float] = None
+    topics: Optional[List[str]] = None
+    notes: Optional[str] = None
+
+class TestResponse(BaseModel):
+    id: int
+    course_id: int
+    name: str
+    test_date: datetime
+    test_type: Optional[str]
+    score: Optional[float]
+    max_score: float
+    weight: float
+    topics: Optional[List[str]]
+    notes: Optional[str]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
 # Request schemas
 class SyllabusImportRequest(BaseModel):
     syllabus_text: str
@@ -132,6 +174,7 @@ class SyllabusImportRequest(BaseModel):
 class GeneratePlanRequest(BaseModel):
     course_id: int
     start_date: str
+    end_date: Optional[str] = None
 
 class UpdateSessionRequest(BaseModel):
     new_date: Optional[str] = None

@@ -10,6 +10,9 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     full_name = Column(String)
+    login_streak = Column(Integer, default=0)
+    last_login_date = Column(DateTime(timezone=True), nullable=True)
+    longest_streak = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     courses = relationship("Course", back_populates="user")
@@ -18,6 +21,7 @@ class User(Base):
     quizzes = relationship("Quiz", back_populates="user")
     quiz_attempts = relationship("QuizAttempt", back_populates="user")
     weaknesses = relationship("Weakness", back_populates="user")
+    tests = relationship("Test", back_populates="user")
 
 class Course(Base):
     __tablename__ = "courses"
@@ -28,10 +32,12 @@ class Course(Base):
     code = Column(String)
     topics = Column(JSON)  # List of topics
     deadlines = Column(JSON)  # List of deadlines with dates
+    syllabus_content = Column(Text)  # Full syllabus text content
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     user = relationship("User", back_populates="courses")
     study_plans = relationship("StudyPlan", back_populates="course")
+    tests = relationship("Test", back_populates="course")
 
 class StudyPlan(Base):
     __tablename__ = "study_plans"
@@ -110,4 +116,23 @@ class Weakness(Base):
     last_updated = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     user = relationship("User", back_populates="weaknesses")
+
+class Test(Base):
+    __tablename__ = "tests"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    course_id = Column(Integer, ForeignKey("courses.id"), nullable=False)
+    name = Column(String, nullable=False)  # e.g., "Midterm Exam", "Final Exam"
+    test_date = Column(DateTime, nullable=False)
+    test_type = Column(String)  # e.g., "midterm", "final", "quiz", "assignment"
+    score = Column(Float, nullable=True)  # Null for upcoming tests, set after completion
+    max_score = Column(Float, default=100)  # Maximum possible score
+    weight = Column(Float, default=0.0)  # Weight of this test in final grade
+    topics = Column(JSON)  # List of topics covered in this test
+    notes = Column(Text)  # Additional notes
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    user = relationship("User", back_populates="tests")
+    course = relationship("Course", back_populates="tests")
 
